@@ -274,7 +274,24 @@ def reduce_ss(ss):
     sss = "".join(ss_reduced)
     return sss
 
+def extract_CA_coordinates(infile,chain):
+    '''''
+    This function is able to get the CA coordinates from a PDB file. It needs the PDB file downloaded in the same location.
+    '''''
+    pdb = open(infile,"r")
+    pdb = pdb.readlines()
+    CA_coord = []
+    outfile = infile.strip(".pdb")+"_"+chain+"_CA.pdb"
+    out = open(outfile,"w")
+    for line in pdb:
+        if line.startswith("ATOM"):
+            if line[21:22].strip() == chain:
+                if line[13:16].strip() == "CA":
+                    #CA_coord.append(line)
+                    out.write(line)
 
+
+    return out
 
 
 #this function needs to be revised to work properly with the numbering
