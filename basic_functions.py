@@ -46,3 +46,24 @@ def average_replicates(dfin,merge=False,keep=True):
             return dfm2
     else:
         return df_average
+
+def append_value(dict_obj, key, value):
+    '''''
+    This function is useful for creating a dicitonary where new values can be added and do not replace the value if the key was already in the dict.
+    Use instead of dict.update()
+    USAGE: append_value(dict,key,value). Can also be as dict inside a dict: append_value(pep_coord,k,{x:pep_coordinates})
+
+    '''''
+    # Check if key exist in dict or not
+    if key in dict_obj:
+        # Key exist in dict.
+        # Check if type of value of key is list or not
+        if not isinstance(dict_obj[key], list):
+            # If type is not list then make it list
+            dict_obj[key] = [dict_obj[key]]
+        # Append the value in list
+        dict_obj[key].append(value)
+    else:
+        # As key is not in dict,
+        # so, add key-value pair
+        dict_obj[key] = value

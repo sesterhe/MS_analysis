@@ -23,6 +23,15 @@ def retrieve_pdb(inputdict):
 
     return None
 
+def retrieve_pdb2(name):
+    url = "https://files.rcsb.org/download/"
+
+    cmd = "wget "+url+name
+
+    if not os.path.isfile(name):
+        print(cmd)
+        os.system(cmd)
+
 def extract_sequence_from_pdb(infile, chain):
     threetoone = {'CYS': 'C', 'ASP': 'D', 'SER': 'S', 'GLN': 'Q', 'LYS': 'K',
      'ILE': 'I', 'PRO': 'P', 'THR': 'T', 'PHE': 'F', 'ASN': 'N',
@@ -274,7 +283,139 @@ def reduce_ss(ss):
     sss = "".join(ss_reduced)
     return sss
 
+def extract_CA_coordinates(infile,chain):
+    '''''
+    This function is made to get the CA coordinates from a PDB file. It needs the PDB file downloaded in the same location.The output is a file ending on _CA.pdb with the CA coordinates only.
+    '''''
+    pdb = open(infile,"r")
+    pdb = pdb.readlines()
+    CA_coord = []
+    outfile = infile.strip(".pdb")+"_"+chain+"_CA.pdb"
+    out = open(outfile,"w")
+    for line in pdb:
+        if line.startswith("ATOM"):
+            if line[21:22].strip() == chain:
+                if line[13:16].strip() == "CA":
+                    #CA_coord.append(line)
+                    out.write(line)
+                    print(line)
+    return out
 
+def extract_HETATM_coordinates(infile,chain):
+    '''''
+    This function is able to get the HETATM (except water) coordinates from a PDB file. It needs the PDB file downloaded in the same location. The output is a file ending on _HETATM.pdb with the coordinates.
+    '''''
+    i = open(infile,"r")
+    i = i.readlines()
+    outfile = infile.strip(".pdb")+"_HETATM.pdb"
+    o = open(outfile,"w")
+    for line in i:
+        if line.startswith("HETATM"):
+            if line[17:20] != "HOH":
+                print(line.strip())
+                o.write(line)
+    #return o.write(line)
+
+def extract_HETATM_ID(infile,chain):
+    '''''
+    This function is able to get the HETATM (except water) ID from a PDB file. It returns a dictionary with the format PDB:[NAMES OF LIGANDS].
+
+    '''''
+
+    i = open(infile,"r")
+    i = i.readlines()
+    ligands = []
+    ligands2 = []
+    PDBLIG={}
+    for line in i:
+        if line.startswith("HETATM"):
+            if line[17:20] != "HOH":
+                ligand = line[17:20]
+                ligands.append(ligand)
+    ligands2 = list(set(ligands))
+    PDBLIG[infile.strip("_HETATM.pdb")] = ligands2
+    return PDBLIG
+
+def compute_minimal_distance_marker_to_HETATM(marker,HETATM):
+
+    '''''
+    computes the minimal distance in A between two pdb files. Input should be a file with the CA coordinates (but can be anything)
+    of an MS detected peptide, followed by a coordinate file containing only the HETATMs of a PDB of interest. returns the minimal
+    distance.
+    '''''
+
+    i = open(marker,"r").readlines()
+    coords_marker = []
+    distances = []
+    coords_hetatm = []
+    for x in i:
+        #print(x)
+        x_coord = float(x[31:38].strip())
+        y_coord = float(x[39:46].strip())
+        z_coord = float(x[47:54].strip())
+        ar = np.array([x_coord,y_coord,z_coord])
+        coords_marker.append(ar)
+
+
+    i = open(HETATM,"r").readlines()
+    coords_hetatm = []
+    for x in i:
+        try:
+            x_coord = float(x[31:38].strip())
+            y_coord = float(x[39:46].strip())
+            z_coord = float(x[47:54].strip())
+            ar = np.array([x_coord,y_coord,z_coord])
+            coords_hetatm.append(ar)
+        except ValueError:
+            continue
+
+    for c in coords_marker:
+            for c2 in coords_hetatm:
+                dist = np.linalg.norm(c-c2)
+                distances.append(dist)
+
+    #print(min(distances))
+    return(min(distances))
+
+def extract_CA_coordinates_of_marker(msdict):
+    '''''
+    needs prior loading of UPPDB dictionary. Will load the dictionary with the uniprot IDs and the MS peptides automatically.
+    Will generate pdb files with the CA coordinates of the identified peptide(s).
+    needs further testing
+    USAGE: extract_CA_coordinates_of_marker("/Users/sesterhe/Dropbox/PD_project/PD_vs_healthy/biomarker_dict.json")
+    '''''
+
+    with open(msdict, 'r') as fp:
+        biomarker = json.load(fp)
+    for k in biomarker.keys():
+        try:
+            #print(k)
+            pdb = UPPDB[k][0]
+            #print(pdb)
+        except KeyError:
+            continue
+        if pdb:
+
+            pdb_name = pdb.split("_")[0]+".pdb"
+            chain = pdb.split("_")[1]
+            extract_CA_coordinates(pdb_name,chain)
+            seq = extract_sequence_from_pdb(pdb_name,chain)
+            #print(seq)
+            pep= biomarker[k]
+            #print(pep)
+
+            for p in pep:
+                try:
+                    indices = get_indices(seq,p)
+                    i = open(pdb_name.strip(".pdb")+"_"+chain+"_CA.pdb","r")
+                    o = open(pdb_name.strip(".pdb")+"_marker_CA.pdb","w")
+                    i2 = i.readlines()
+                    #print(i2)
+                    for e in i2[indices[0]:indices[1]]:
+                        #print(e)
+                        o.write(e.strip()+"\n")
+                except ValueError:
+                    continue
 
 
 #this function needs to be revised to work properly with the numbering
@@ -348,3 +489,169 @@ def get_PDBs_highlight_peptides(query):
     log.close()
     output.close()
     return log, output
+
+def find_representative_pdb(pep_dict):
+    '''''
+    identifies a representative pdb structure or homology model (one, not several). Needs UPPDB_with_homol_models dictionary preloaded. Extracts sequences on-the-fly.
+    Input is a pep_dict, generated by: 'pep_dict = convert_df_to_dict(df,"Prot","Pep")'
+
+    returns pep_pdb dictioanary that has the peptide and a representative pdb structure that contains this peptide sequence. can be added to original dataframe
+    by df["representative_PDB"] = df["Pep"].map(find_representative_pdb_or_homol(pep_dict))
+    '''''
+    pep_pdb_only = {}
+    for upid,pep in pep_dict.items():
+        count = 0
+        try:
+            pdb = UPPDB[upid]
+        except KeyError:
+            continue
+        for p in pdb:
+            if count < 1:
+                p=str(p)
+                name = p.split("_")[0]+".pdb"
+                chain = p.split("_")[1]
+                if not os.path.isfile(name):
+                    retrieve_pdb2(name)
+                try:
+                    ss = extract_sequence_from_pdb(name,chain)
+                except FileNotFoundError:
+                    continue
+                if ss:
+                    for pe in pep:
+                        if pe in ss:
+                            count = 1
+                            pep_pdb_only.update({pe:p})
+
+            else:
+                continue
+    return pep_pdb_only
+
+def find_representative_pdb_or_homol(pep_dict):
+    '''''
+    identifies a representative pdb structure or homology model (one, not several). Needs UPPDB_with_homol_models dictionary preloaded. Extracts sequences on-the-fly.
+    Input is a pep_dict, generated by: 'pep_dict = convert_df_to_dict(df,"Prot","Pep")'
+
+    returns pep_pdb dictioanary that has the peptide and a representative pdb structure that contains this peptide sequence. can be added to original dataframe
+    by df["representative_PDB"] = df["Pep"].map(find_representative_pdb_or_homol(pep_dict))
+    '''''
+    pep_pdb = {}
+    for upid,pep in pep_dict.items():
+        count = 0
+        try:
+            pdb = UPPDB_with_homol_models[upid]
+        except KeyError:
+            continue
+        for p in pdb:
+            if count < 1:
+                p=str(p)
+
+                if len(p) > 7:
+                    name = p
+                    chain = ""
+                else:
+                    name = p.split("_")[0]+".pdb"
+                    chain = p.split("_")[1]
+                    if not os.path.isfile(name):
+                        retrieve_pdb2(name)
+                try:
+                    ss = extract_sequence_from_pdb(name,chain)
+                except FileNotFoundError:
+                    continue
+                if ss:
+                    for pe in pep:
+                        if pe in ss:
+                            count = 1
+                            pep_pdb.update({pe:p})
+
+            else:
+                continue
+    return pep_pdb
+
+
+def extract_coords2(infile, chain):
+    threetoone = {'CYS': 'C', 'ASP': 'D', 'SER': 'S', 'GLN': 'Q', 'LYS': 'K',
+     'ILE': 'I', 'PRO': 'P', 'THR': 'T', 'PHE': 'F', 'ASN': 'N',
+     'GLY': 'G', 'HIS': 'H', 'LEU': 'L', 'ARG': 'R', 'TRP': 'W',
+     'ALA': 'A', 'VAL':'V', 'GLU': 'E', 'TYR': 'Y', 'MET': 'M'}
+    pdb2 = "5LPE_B"
+
+
+    pdb = open(infile,"r")
+    chain = chain
+    pdb = pdb.readlines()
+    sequence = []
+    coords_peptide = []
+
+    output = {}
+    for line in pdb:
+        if line.startswith("ATOM"):
+            if line[21:22].strip() == chain:
+                if line[13:16].strip() == "CA":
+                    sequence.append((threetoone[line[17:20]]))
+                    xcoords=float(line[30:38].strip())
+                    ycoords=float(line[39:46].strip())
+                    zcoords=float(line[47:54].strip())
+                    ar = np.array([xcoords,ycoords,zcoords])
+                    coords_peptide.append(ar)
+    seq = "".join(sequence)
+    return coords_peptide
+
+def find_closest_active_site(pep_coord_dict):
+    '''''
+    needs as input a nested dictionary with {UPID:{pep:coords}}
+    '''''
+    pep_active_site_distances = {}
+    for k,v in pep_coord_dict.items():
+        try:
+            active = active_site_coord[k]
+            #print(active)
+        except:
+            continue
+        if str(active) == "nan":
+            continue
+        else:
+
+            for kk,vv in v.items():
+                #print(kk)
+                temp_active = []
+                for vvv in vv:
+
+                    for a in active:
+                        dist = np.linalg.norm(vvv-a)
+                        temp_active.append(dist)
+
+
+
+                pep_active_site_distances.update({kk:min(temp_active)})
+    return pep_active_site_distances
+
+def find_closest_binding_site(pep_coord_dict):
+    '''''
+    needs as input a nested dictionary with {UPID:{pep:coords}}
+    '''''
+    pep_binding_site_distances = {}
+    for k,v in pep_coord_dict.items():
+        try:
+            binding = binding_site_coord[k]
+            #print(active)
+        except:
+            continue
+        if str(binding) == "nan":
+            continue
+        else:
+
+            for kk,vv in v.items():
+                #print(kk)
+                temp_binding = []
+                for vvv in vv:
+
+                    for b in binding:
+                        dist = np.linalg.norm(vvv-b)
+                        temp_binding.append(dist)
+                        #print(dist)
+
+
+
+                pep_binding_site_distances.update({kk:min(temp_binding)})
+    return pep_binding_site_distances
+        #print(k,kk, min(temp_binding))
