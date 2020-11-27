@@ -301,6 +301,21 @@ def extract_CA_coordinates(infile,chain):
                     print(line)
     return out
 
+
+def align_pep_PDBseq(peptide,PDB,chain):
+    '''''
+    aligns a peptide sequence to the PDBsequence extracted by "extract_sequence_from_pdb" function. Needs peptide,PDB and chain info. 
+    Returns a list of len 3, where element 1 is an alignment score, element 2 and 3 are the start and end positions of the alignments. 
+    USAGE: align_pep_PDBseq("RGHIY","2B14.pdb","A")
+
+    '''''
+    pdb_seq = extract_sequence_from_pdb(PDB,chain)
+    alignments = pairwise2.align.localms(pdb_seq, peptide,1, -1, -1, 0)
+    score = alignments[0][2]
+    start = alignments[0][3]
+    stop = alignments[0][4]
+    return [score,start,stop]
+
 def extract_HETATM_coordinates(infile,chain):
     '''''
     This function is able to get the HETATM (except water) coordinates from a PDB file. It needs the PDB file downloaded in the same location. The output is a file ending on _HETATM.pdb with the coordinates.
