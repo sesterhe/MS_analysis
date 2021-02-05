@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-
+from Bio.Seq import Seq
+from Bio import pairwise2
 
 def read_input_filter_proteotypic(df):
     '''''
@@ -67,3 +68,10 @@ def append_value(dict_obj, key, value):
         # As key is not in dict,
         # so, add key-value pair
         dict_obj[key] = value
+
+def align_pep_upseq(pep,upseq):
+    alignments = pairwise2.align.localms(pep, upseq,1, -1, -1, 0)
+    score = alignments[0][2]
+    start = alignments[0][3]
+    stop = alignments[0][4]
+    return [score,start,stop]

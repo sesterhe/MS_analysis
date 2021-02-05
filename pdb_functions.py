@@ -1,3 +1,11 @@
+import json
+import pandas as pd
+import os
+import re
+import numpy as np
+from Bio.Seq import Seq
+from Bio import pairwise2
+
 def retrieve_pdb(inputdict):
     import os
     url = "https://files.rcsb.org/download/"
@@ -304,8 +312,8 @@ def extract_CA_coordinates(infile,chain):
 
 def align_pep_PDBseq(peptide,PDB,chain):
     '''''
-    aligns a peptide sequence to the PDBsequence extracted by "extract_sequence_from_pdb" function. Needs peptide,PDB and chain info. 
-    Returns a list of len 3, where element 1 is an alignment score, element 2 and 3 are the start and end positions of the alignments. 
+    aligns a peptide sequence to the PDBsequence extracted by "extract_sequence_from_pdb" function. Needs peptide,PDB and chain info.
+    Returns a list of len 3, where element 1 is an alignment score, element 2 and 3 are the start and end positions of the alignments.
     USAGE: align_pep_PDBseq("RGHIY","2B14.pdb","A")
 
     '''''
@@ -513,6 +521,9 @@ def find_representative_pdb(pep_dict):
     returns pep_pdb dictioanary that has the peptide and a representative pdb structure that contains this peptide sequence. can be added to original dataframe
     by df["representative_PDB"] = df["Pep"].map(find_representative_pdb_or_homol(pep_dict))
     '''''
+
+    with open('/Users/fsesterhenn/Dropbox/PostDoc/PD_project/databases/UPID_PDB_CHAIN.json', 'r') as fp:
+        UPPDB = json.load(fp)
     pep_pdb_only = {}
     for upid,pep in pep_dict.items():
         count = 0

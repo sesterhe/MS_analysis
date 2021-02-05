@@ -3,7 +3,7 @@
 import rstoolbox.io as rs
 import json
 import statistics
-
+import numpy as np
 
 def generate_dict_from_fasta(infile,outfile):
     '''''
@@ -97,4 +97,35 @@ def extract_func_site(df,header,pattern,outfile):
             out.update({entry[i]:e})
     with open(outfile, 'w') as fp:
             json.dump(out, fp)
-    return out 
+    return out
+
+def compute_disorder_for_peptides(ids,pep):
+    '''''
+    this function takes as input a list of uniprot ids and a list of peptides for which disorder should be computed.
+    the output is a dictionary with the peptide and the mean disorder score from the precomputed disopred scores, which are loaded from an external hard drive or the nas.
+    '''''
+    pep_disorder = {}
+    for idx,i in enumerate(ids):
+        seq = []
+        scores = []
+        try:
+            fi = open("/Volumes/Fabian_data/databases/disorder_all_human/diso_files/"+i+".diso","r")
+            fi2 = fi.readlines()
+            for l in fi2:
+                if not l.startswith("#"):
+                    seq.append(l[6:7])
+                    #print(l)
+                    scores.append(l[10:15].strip())
+
+            sequence = "".join(seq)
+            match = re.search(pep[idx],sequence)
+            match_scores = scores[match.start():match.end()]
+            temp = []
+            for m in match_scores:
+                temp.append(float(m))
+            score = sum(temp)/len(temp)
+            pep_disorder.update({pep[idx]:score})
+        except:
+            pep_disorder.update({pep[idx]:np.nan})
+        print(pep_disorder)
+    return(pep_disorder)
