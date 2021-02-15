@@ -1,5 +1,4 @@
 import os
-
 import numpy
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -61,3 +60,30 @@ def compute_distance_fingerprints(cond1,cond2):
         dst = distance.euclidean(cond1[k], cond2[k])
         output.update({k:dst})
     return output
+
+def compute_distance_fingerprints2(cond1,cond2):
+    output = {}
+    for k in cond1.keys():
+        if k in cond2.keys():
+            a = numpy.nan_to_num(cond1[k],posinf=0, neginf=0)
+            b= numpy.nan_to_num(cond2[k],posinf=0, neginf=0)
+            dst = distance.euclidean(a, b)
+            output.update({k:dst})
+
+    return output
+
+def visualize_fingerprint(array,UPID,cmap='Blues',save=False):
+
+    dpi = 150
+    fig = plt.figure(figsize=(4, 2), dpi=dpi)
+    plt.imshow(array[UPID].reshape(1, -1),vmin =0, vmax=10 ,cmap=cmap, aspect='auto',interpolation='none')
+    plt.xticks()
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.xticks(fontsize=14, fontname="Arial")
+    plt.tick_params(axis="x",which='major')
+    plt.xlabel("Sequence",fontname="Arial",fontsize=14)
+    plt.yticks([])
+    plt.tight_layout()
+    if save:
+        outfilename=UPID+"_fingerprint.pdf"
+        plt.savefig("/Users/fsesterhenn/Desktop/"+outfilename)

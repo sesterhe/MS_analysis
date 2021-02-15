@@ -1,6 +1,6 @@
 
 
-import rstoolbox.io as rs
+#import rstoolbox.io as rs
 import json
 import statistics
 import numpy as np
@@ -125,7 +125,8 @@ def compute_disorder_for_peptides(ids,pep):
                 temp.append(float(m))
             score = sum(temp)/len(temp)
             pep_disorder.update({pep[idx]:score})
-        except:
+        except FileNotFoundError:
+            print("file not found")
             pep_disorder.update({pep[idx]:np.nan})
-        print(pep_disorder)
+        #print(pep_disorder)
     return(pep_disorder)
