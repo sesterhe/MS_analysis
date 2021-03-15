@@ -3,6 +3,8 @@ import numpy as np
 from Bio.Seq import Seq
 from Bio import pairwise2
 import re
+import json
+
 
 def read_input_filter_proteotypic(df):
     '''''
@@ -223,7 +225,7 @@ def compute_ss_peptide(df,colname_ids = "PG.ProteinAccessions",colname_pepseq="P
 
 def average_replicates_peptide_level(df,colname_pep="PEP.StrippedSequence",colname_intensity="FG.Quantity_y",merge=True):
     ''''this function may need work and needs to be checked properly'''''
-    
+
     grouped = df.groupby(colname_pep).mean().reset_index()
     grouped_stddev = df.groupby(colname_pep).std().reset_index()
     grouped2 = grouped[[colname_pep,colname_intensity]]

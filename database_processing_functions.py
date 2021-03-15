@@ -4,6 +4,7 @@
 import json
 import statistics
 import numpy as np
+import re
 
 def generate_dict_from_fasta(infile,outfile):
     '''''
@@ -82,17 +83,29 @@ def extract_func_site(df,header,pattern,outfile):
     for i,e in enumerate(l):
         if search in str(e):
             temp = []
+            temp2 = []
             m = re.finditer(search,e)
+
             for x in m:
-                try:
-                    temp.append(int(e[x.end():x.end()+5].strip(";").strip()))
-                except ValueError:
+
+                #temp.append(str(e[x.end():x.end()+12].strip(";").strip().strip(";").strip("/n").strip().strip(";")))
+                temp.append(str(e[x.end():x.end()+12].split(";")[0].strip()))
+            try:
+                for t in temp:
+                    #print(t)
+                    start = int(t.split("..")[0])
                     try:
-                        temp.append(int(e[x.end():x.end()+4].strip(";").strip()))
-                    except ValueError:
-                        temp.append(int(e[x.end():x.end()+3].strip(";").strip()))
-            print(temp)
-            out.update({entry[i]:temp})
+                        end = int(t.split("..")[1])
+                        tempx = list((range(start,end+1)))
+                        for x in tempx:
+                            temp2.append(x)
+                    except IndexError:
+                        temp2.append(start)
+                print(temp2)
+            except ValueError:
+                continue
+
+            out.update({entry[i]:temp2})
         else:
             out.update({entry[i]:e})
     with open(outfile, 'w') as fp:
@@ -119,12 +132,13 @@ def compute_disorder_for_peptides(ids,pep):
 
             sequence = "".join(seq)
             match = re.search(pep[idx],sequence)
-            match_scores = scores[match.start():match.end()]
-            temp = []
-            for m in match_scores:
-                temp.append(float(m))
-            score = sum(temp)/len(temp)
-            pep_disorder.update({pep[idx]:score})
+            if match:
+                match_scores = scores[match.start():match.end()]
+                temp = []
+                for m in match_scores:
+                    temp.append(float(m))
+                score = sum(temp)/len(temp)
+                pep_disorder.update({pep[idx]:score})
         except FileNotFoundError:
             print("file not found")
             pep_disorder.update({pep[idx]:np.nan})

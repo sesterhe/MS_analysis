@@ -5,6 +5,8 @@ import re
 import numpy as np
 from Bio.Seq import Seq
 from Bio import pairwise2
+import Bio.PDB
+
 
 def retrieve_pdb(inputdict):
     import os
@@ -681,3 +683,15 @@ def find_closest_binding_site(pep_coord_dict):
                 pep_binding_site_distances.update({kk:min(temp_binding)})
     return pep_binding_site_distances
         #print(k,kk, min(temp_binding))
+def calc_residue_dist(residue_one, residue_two) :
+    """Returns the C-alpha distance between two residues"""
+    diff_vector  = residue_one["CA"].coord - residue_two["CA"].coord
+    return numpy.sqrt(numpy.sum(diff_vector * diff_vector))
+
+def calc_dist_matrix(chain) :
+    """Returns a matrix of C-alpha distances between two chains"""
+    dist_matrix = numpy.zeros((len(chain), len(chain)), numpy.float)
+    for row, residue_one in enumerate(chain) :
+        for col, residue_two in enumerate(chain):
+            dist_matrix[row, col] = calc_residue_dist(residue_one, residue_two)
+    return dist_matrix
