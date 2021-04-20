@@ -115,7 +115,7 @@ def istryptic(df,column_name="PEP.StrippedSequence",ids = "PG.ProteinAccessions"
     for i,p in enumerate(peps):
         length_begin = len(istryptic)
         try:
-            fullseq = UPSEQ[ids[i]]
+            fullseq = UPseq[ids[i]]
 
             match = re.search(p,fullseq)
             start = match.start()
@@ -202,10 +202,10 @@ def compute_ss_peptide(df,colname_ids = "PG.ProteinAccessions",colname_pepseq="P
 
 
     pep_psi = []
-    seq = df["UPSEQ"].to_list()
+    seqs = df["UPSEQ"].to_list()
     psi = df["PSIPRED"].to_list()
     for i,x in enumerate(peplist):
-        m = re.search(str(x),str(seq[i]))
+        m = re.search(str(x),str(seqs[i]))
         if m:
             if str(psi[i]) !="NaN":
                 ppsi = str(psi[i][m.start():m.end()])

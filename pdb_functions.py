@@ -695,3 +695,406 @@ def calc_dist_matrix(chain) :
         for col, residue_two in enumerate(chain):
             dist_matrix[row, col] = calc_residue_dist(residue_one, residue_two)
     return dist_matrix
+
+def extract_coordinates_peptides(pep_dict,seq=seq,data_representative_pdb=data_representative_pdb):
+    '''''
+    Input: dictionary with the UniProtID:[peptides].
+    Requirements:
+    1) load UniProtID:sequence dictionary ("seq").
+    2) Create dictionary with peptide:PDB from your dataframe ("data_representative_pdb")
+    Output: dictionary containing the peptides with their coordinates as np.array (pep_coord)
+
+    '''''
+    pep_coord = {}
+    for k, v in pep_dict.items():
+        temp_dict = {}
+        try:
+            for x in v:
+
+                m = re.search(x,seq[k])
+                pdb = data_representative_pdb[x]
+                name = pdb.split("_")[0]+".pdb"
+                chain = pdb.split("_")[1]
+
+                if not os.path.isfile(name):
+                    retrieve_pdb2(name)
+
+                s  = extract_sequence_from_pdb(name,chain)
+
+
+                o = re.search(x,s)
+                xx = extract_coords(name,chain)
+                pep_coordinates = xx[o.start():o.end()]
+                temp_dict.update({x:pep_coordinates})
+                pep_coord.update({k:temp_dict})
+                #append_value(pep_coord,k,{x:pep_coordinates})
+
+        except KeyError:
+            continue
+    return pep_coord
+
+def compute_distance_to_func_site(functionalsites,df,pep_coord,colname_ids =UPID):
+
+    '''''
+    input:
+    functionalsites = dictionary with uniprot ids and a list of residues annotated as functional site (e.g. binding, active site)
+    EXAMPLE:
+    with open('./data/ORGANIMS/ORGANISM_active_sites.json', 'r') as fp:
+        activesites = json.load(fp)
+    df = your dataframe
+    colname_ids = name of the column that contains the UniProtIDs
+    pep_coord = output from extract_coordinates_peptides() function
+
+    output:
+    dictionary with peptide:minimal distance to a functionalsite (minimal distance (CAlpha) to the closest functional site only!)
+
+    EXAMPLE USAGE:
+    act_dist = compute_distance_to_func_site(activesites,df,p,UPID)
+    '''''
+
+    # 1) Create artificial peptides around the functional site (+/-3 residues)
+
+    active_site_peptides = {}
+    for k,v in functionalsites.items():
+        if str(v) == 'nan':
+            continue
+        else:
+            try:
+                seqs = seq[k]
+            except KeyError:
+                continue
+            pept = []
+            for x in v:
+                pept.append(seqs[x-3:x+3])
+                active_site_peptides.update({k:pept})
+
+    # 2) Extract coordinates from PDB for the functional site of interest
+
+    active_site_coord = {}
+    UPID_representative_PDB = convert_df_to_dict(df,colname_ids,"representative_PDB")
+
+    for k, v in active_site_peptides.items():
+
+        try:
+            representative_pdb = UPID_representative_PDB[k][0]
+        except KeyError:
+            continue
+        if str(representative_pdb) =="nan":
+            continue
+        else:
+            name = representative_pdb.split("_")[0]+".pdb"
+            chain = representative_pdb.split("_")[1]
+            s  = extract_sequence_from_pdb(name,chain)
+            #print(k,s)
+
+            for x in v:
+                try:
+                    match = re.search(x,s)
+                    match2 =  match.start()+2
+                    xx = extract_coords(name,chain)
+                    pep_coordinates = xx[match2]
+                    append_value(active_site_coord,k,pep_coordinates)
+
+
+                except:
+                    continue
+
+    # 3) Compute minimal distance distance
+
+    pep_min_dist_to_active_site = {}
+    for k,v in pep_coord.items():
+        try:
+            active = active_site_coord[k]
+        except:
+            continue
+        if str(active) == "nan":
+            continue
+        else:
+            for kk,vv in v.items():
+                temp_active = []
+                for vvv in vv:
+
+                    for a in active:
+                        dist = np.linalg.norm(vvv-a)
+                        temp_active.append(dist)
+
+                pep_min_dist_to_active_site.update({kk:min(temp_active)})
+
+    return pep_min_dist_to_active_site
+
+
+def extract_HETATM_ID(infile,chain):
+    '''''
+    This function is able to get the HETATM (except water) ID from a PDB file. It returns a dictionary with the format PDB:[NAMES OF LIGANDS].
+    Input: a PDB file and the chain name.
+    Example: extract_HETATM_ID("PATH/TO/FILE/6xvf.pdb","A")
+    '''''
+
+    i = open(infile,"r")
+    i = i.readlines()
+    ligands = []
+    ligands2 = []
+    PDBLIG={}
+    for line in i:
+        if line.startswith("HETATM"):
+            if line[17:20] != "HOH":
+                ligand = line[17:20]
+                ligands.append(ligand)
+    ligands2 = list(set(ligands))
+    PDBLIG[infile.strip("_HETATM.pdb")] = ligands2
+    return PDBLIG
+
+def compute_distance(PDB1, chain1, pep1, PDB2, chain2, pep2,mode="CA"):
+
+    '''''
+    Function to compute the distance between two peptides in either the same or different PDB files.
+    Example: compute_distance("/PATH/TO/FILE/4jhw.pdb","CHAIN","PEPTIDEK","/PATH/TO/FILE/4jhw.pdb","CHAIN","PEPTIDEK",mode="CA")
+    currently only works in Calpha mode. Measuring distances between all atoms will be added later.
+
+    '''''
+
+    i1 = open(PDB1,"r").readlines()
+    i2 = open(PDB2,"r").readlines()
+    coords_pep1 = []
+    coords_pep2 = []
+    distances = []
+    i1_seq = extract_sequence_from_pdb(PDB1, chain1)
+    i2_seq = extract_sequence_from_pdb(PDB2, chain2)
+
+    i1_list = []
+    i2_list = []
+
+
+    match1 = re.search(pep1,i1_seq)
+    if match1 is None:
+        raise Exception("peptide sequence "+pep1 + " was not found in "+PDB1)
+
+
+    match2 = re.search(pep2,i2_seq)
+    if match2 is None:
+        raise Exception("peptide sequence "+pep2 + " was not found in "+PDB2)
+
+
+    if mode=="CA":
+
+        for line in i1:
+            if line.startswith("ATOM"):
+                if line[21:22].strip() == chain1:
+                    if line[13:16].strip() == "CA":
+                        i1_list.append(line)
+
+        for x in i1_list[match1.start():match1.end()]:
+
+            x_coord = float(x[31:38].strip())
+            y_coord = float(x[39:46].strip())
+            z_coord = float(x[47:54].strip())
+            ar = np.array([x_coord,y_coord,z_coord])
+            coords_pep1.append(ar)
+
+
+        for line in i2:
+            if line.startswith("ATOM"):
+                if line[21:22].strip() == chain2:
+                    if line[13:16].strip() == "CA":
+                        i2_list.append(line)
+
+        for x in i2_list[match2.start():match2.end()]:
+
+            x_coord = float(x[31:38].strip())
+            y_coord = float(x[39:46].strip())
+            z_coord = float(x[47:54].strip())
+            ar = np.array([x_coord,y_coord,z_coord])
+            coords_pep2.append(ar)
+
+        for c in coords_pep1:
+            for c2 in coords_pep2:
+                dist = np.linalg.norm(c-c2)
+                distances.append(dist)
+
+
+    print("Minmal distance is: "+str(min(distances)))
+
+    return min(distances)
+
+def compute_distance_HETATM(PDB1, chain1, pep1, PDB2, HETATM):
+
+    '''''
+    Function to compute the distance between a peptide and a ligand/HETATM.
+    Example: compute_distance("/PATH/TO/FILE/4jhw.pdb","CHAIN","PEPTIDEK","/PATH/TO/FILE/4jhw.pdb","LIGAND_ID")
+    You can look up the ID of the ligand by calling the function "extract_HETATM_ID(PDBFILE,CHAIN)".
+    '''''
+
+    i1 = open(PDB1,"r").readlines()
+    i2 = open(PDB2,"r").readlines()
+    coords_pep1 = []
+    coords_pep2 = []
+    distances = []
+    i1_seq = extract_sequence_from_pdb(PDB1, chain1)
+    match1 = re.search(pep1,i1_seq)
+    i1_list = []
+    i2_list = []
+
+    if match1 is None:
+        raise Exception("peptide sequence "+pep1 + " was not found in "+PDB1)
+
+
+    for line in i1:
+        if line.startswith("ATOM"):
+            if line[21:22].strip() == chain1:
+                if line[13:16].strip() == "CA":
+                    i1_list.append(line)
+
+    for x in i1_list[match1.start():match1.end()]:
+
+        x_coord = float(x[31:38].strip())
+        y_coord = float(x[39:46].strip())
+        z_coord = float(x[47:54].strip())
+        ar = np.array([x_coord,y_coord,z_coord])
+        coords_pep1.append(ar)
+
+
+    for line in i2:
+        if line.startswith("HETATM"):
+
+                if line[17:20].strip() == HETATM:
+                        i2_list.append(line)
+
+    for x in i2_list:
+
+        x_coord = float(x[31:38].strip())
+        y_coord = float(x[39:46].strip())
+        z_coord = float(x[47:54].strip())
+        ar = np.array([x_coord,y_coord,z_coord])
+        coords_pep2.append(ar)
+
+    for c in coords_pep1:
+        for c2 in coords_pep2:
+            dist = np.linalg.norm(c-c2)
+            distances.append(dist)
+
+
+    print("Minmal distance to ligand is: " + str(min(distances)))
+
+    return min(distances)
+
+
+# Identify peptides in spatial proximity to any pair of PDB:list of peptides
+def identify_proximal_peptides(pep_pdb,distance=11):
+
+    '''''
+    input: dictionary containing PDB:list_of_peptides, generated for example by:
+    pep_pdb = convert_df_to_dict(df,"representative_PDB","PEP.StrippedSequence")
+
+    Make sure you are connected to NAS where most pdb files are stored.
+
+    Computed are contact maps (reduced distance map with boolean values according to distance cutoff).
+    For each peptide in pep_pdb, the function will check if other peptides are in proximity (distance cutoff).
+    The output is a dictionary with peptides as keys and and the values are all peptides that are in spatial proximity.
+
+    The output can be used to check for each peptide (key) whether any spatially proximal peptide (values) have a fold change or are significant, in order to then mark them as hotspot.
+
+    '''''
+
+
+    out_dict = {}
+    pep_contacts = {}
+    pep_match = {}
+    pdb_pep_contacts = {}
+    for p in pep_pdb.keys():
+
+        pdb_name = p.split("_")[0]+".pdb"
+        pdb_chain = p.split("_")[1]
+
+
+        try:
+            path = "/Volumes/biol_bc_picotti_1/Fabian/PDB_database/"+pathdict[pdb_name]+"/"+pdb_name
+            fi = open(path,"r")
+            fi = fi.readlines()
+        except KeyError:
+            cmd = "wget https://files.rcsb.org/download/"+pdb_name
+            os.system(cmd)
+            if not os.path.isfile(pdb_name):
+                print("this file was not found")
+                continue
+
+        try:
+            p2name = p+"_clean.pdb"
+            if not os.path.isfile(p2name):
+                px = open(path).readlines()
+                p2 = open(p2name,"w")
+                for l in px:
+                    if l.startswith("ATOM"):
+                        p2.write(l)
+                p2.close()
+
+
+            structure = Bio.PDB.PDBParser().get_structure(p2name, p2name)
+            model = structure[0]
+            dist_matrix = calc_dist_matrix(model[pdb_chain])
+            contact_map = dist_matrix < distance
+
+
+            pdbseq = extract_sequence_from_pdb(p2name,pdb_chain)
+        except FileNotFoundError:
+            continue
+
+        for peptide in pep_pdb[p]:
+            match = re.search(peptide,pdbseq)
+            contact_pos = np.where(np.any(contact_map[match.start():match.end()], axis=0))
+            pep_contacts.update({peptide:contact_pos})
+            pep_match.update({peptide:list(range(match.start(),match.end()))})
+
+
+    for p,v in pep_pdb.items():
+
+        for i,vv in enumerate(v):
+            for ii in range(i+1,len(v)):
+                tocheck = pep_contacts[v[ii]][0]
+                if len(intersection(tocheck,pep_match[vv])) > 1:
+                    append_value(out_dict,vv,v[ii])
+                    append_value(out_dict,v[ii],vv)
+
+    return out_dict
+
+
+# PFAM domain analysis
+def get_mid_position(df,colname_pep,colname_seq):
+    '''''
+    Function to match peptides to the uniprot sequence and return the middle position.
+    Needed to compute whether peptide is in a given domain or not.
+    '''''
+    peptides = df[colname_pep].to_list()
+    sequences = df[colname_seq].to_list()
+    positions = []
+    for i, p in enumerate(peptides):
+        try:
+            match = re.search(p,sequences[i])
+            mid = int(match.end()-len(p)/2)
+            positions.append(mid)
+        except:
+            positions.append(np.nan)
+    df["middle_peptide_position"] = positions
+    return df
+
+
+def is_in_domain(df,colname_id,colname_pep,colname_middle_peptide_position,UP_PFAM_range):
+    pep_domain = {}
+    pep_upid = convert_df_to_dict(df,colname_pep,colname_id)
+    pep_pos = convert_df_to_dict(df,colname_pep,colname_middle_peptide_position)
+    for p in pep_pos.keys():
+        upid = pep_upid[p][0]
+        try:
+            pfams = UP_PFAM_range[upid]
+            for pf,pos in pfams.items():
+                l = list(UP_PFAM_range[upid][pf])
+                try:
+                    midpos = int(pep_pos[p][0])
+                except ValueError:
+                    pep_domain.update({p:np.nan})
+                if midpos in range(l[0],l[1]):
+                    pep_domain.update({p:pf})
+                else:
+                    pep_domain.update({p:np.nan})
+        except KeyError:
+            continue
+    return pep_domain
